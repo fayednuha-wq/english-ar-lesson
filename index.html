@@ -33,10 +33,21 @@
             z-index: 99999; color: #fff; font-size: 14px; font-weight: bold;
             text-shadow: 0 1px 4px rgba(0,0,0,0.8); pointer-events: none;
         }
+        #ar-photo {
+            position: fixed; left: 0; top: 0; z-index: 100;
+            pointer-events: none; display: none;
+            will-change: left, top, transform;
+        }
+        #ar-photo img {
+            display: block; height: 100%; width: auto;
+            filter: drop-shadow(0 8px 22px rgba(0,0,0,0.4));
+        }
     </style>
 </head>
 <body>
     <div id="status">Camera is starting...</div>
+
+    <div id="ar-photo"><img id="ar-photo-img" src="case1.png"></div>
 
     <div id="ui-container">
         <div class="question-box">
@@ -50,16 +61,8 @@
         </div>
     </div>
 
-    <canvas id="tex-case1" width="1024" height="1024" style="display:none"></canvas>
-    <canvas id="tex-case2" width="1024" height="1024" style="display:none"></canvas>
-    <canvas id="tex-case3" width="1024" height="1024" style="display:none"></canvas>
-    <canvas id="tex-case4" width="1024" height="1024" style="display:none"></canvas>
-    <canvas id="tex-case5" width="1024" height="1024" style="display:none"></canvas>
-
     <a-scene id="scene" embedded arjs="sourceType: webcam; videoTexture: true; debugUIEnabled: false;"
              renderer="colorManagement: false" vr-mode-ui="enabled: false">
-        <a-light type="ambient" color="#ffffff" intensity="1.15"></a-light>
-        <a-light type="directional" color="#ffffff" intensity="0.6" position="1 1 1"></a-light>
         <a-assets>
             <img id="img-case1" src="case1.png">
             <img id="img-case2" src="case2.png">
@@ -68,14 +71,13 @@
             <img id="img-case5" src="case5.png">
         </a-assets>
 
-        <a-entity id="ar-object" position="0 0 -1.75" rotation="0 0 0" photo-controls>
-            <a-plane id="ar-image" src="#img-case1" width="1" height="1" position="0 0 0"
-                     material="shader: standard; transparent: true; opacity: 1; depthWrite: false;"></a-plane>
-        </a-entity>
+        <a-entity id="ar-object" position="0 0 -1.75" rotation="0 0 0" photo-controls></a-entity>
     </a-scene>
 
     <script>
         const statusEl = document.getElementById("status");
+        const photoOverlay = document.getElementById("ar-photo");
+        const photoImg = document.getElementById("ar-photo-img");
 
         AFRAME.registerComponent('photo-controls', {
             init: function () {
@@ -125,9 +127,9 @@
 
                 this.apply = this.apply.bind(this);
                 this.sizeToFit = this.sizeToFit.bind(this);
+                this.apply();
             },
             sizeToFit: function () {
-                // photos are 1024x1024 with the character centered; the plane stays square
                 this.apply();
             },
             apply: function () {
@@ -137,33 +139,50 @@
             }
         });
 
-        const scene = document.getElementById("scene");
-        if (scene) {
-            scene.addEventListener("arjs-video-loaded", () => {
-                statusEl.innerText = "Camera ready - photo in front of you";
-                buildCanvasTextures();
-                setTimeout(buildCanvasTextures, 1500);
-            });
+        // Position the DOM photo over the camera by projecting the AR object
+        // onto the screen every frame. The photo is a normal <img>, so its
+        // colors and transparency are rendered perfectly by the browser.
+        const sceneEl = document.getElementById("scene");
+        let overlayReady = false;
+
+        function updateOverlay() {
+            if (!overlayReady) return;
+            const cam = sceneEl.camera;
+            const obj = document.getElementById("ar-object");
+            if (!cam || !obj || !obj.object3D) return;
+            const worldPos = new THREE.Vector3();
+            obj.object3D.getWorldPosition(worldPos);
+            const v = worldPos.clone().project(cam);
+            // Only show the photo when the object is in front of the camera
+            if (v.z > 1 || v.z < -1) {
+                photoOverlay.style.display = 'none';
+                return;
+            }
+            // Pixel size: project the top and bottom edges of the photo and
+            // measure the on-screen span (uses the real AR camera projection).
+            const h = obj.object3D.scale.x || 1.85;
+            const top = worldPos.clone(); top.y += h / 2;
+            const bot = worldPos.clone(); bot.y -= h / 2;
+            top.project(cam); bot.project(cam);
+            if (top.z > 1 || bot.z > 1) return; // behind camera: keep last size
+            const hPx = Math.abs((top.y - bot.y) * 0.5 * window.innerHeight);
+            const x = (v.x * 0.5 + 0.5) * window.innerWidth;
+            const y = (-v.y * 0.5 + 0.5) * window.innerHeight;
+            const rotY = obj.object3D.rotation.y || 0;
+            photoOverlay.style.display = 'block';
+            photoOverlay.style.left = x + 'px';
+            photoOverlay.style.top = y + 'px';
+            photoImg.style.height = Math.round(hPx) + 'px';
+            photoOverlay.style.transform = 'translate(-50%, -50%) rotateY(' + rotY + 'rad)';
         }
 
-        function buildCanvasTextures() {
-            const names = ['case1', 'case2', 'case3', 'case4', 'case5'];
-            let ok = 0;
-            names.forEach(function (nm) {
-                const srcImg = document.getElementById('img-' + nm);
-                const cv = document.getElementById('tex-' + nm);
-                if (srcImg && cv && srcImg.naturalWidth > 0) {
-                    const ctx = cv.getContext('2d');
-                    ctx.clearRect(0, 0, cv.width, cv.height);
-                    ctx.drawImage(srcImg, 0, 0, cv.width, cv.height);
-                    ok++;
-                }
+        setInterval(updateOverlay, 33);
+
+        if (sceneEl) {
+            sceneEl.addEventListener("arjs-video-loaded", () => {
+                overlayReady = true;
+                statusEl.innerText = "Camera ready - photo in front of you";
             });
-            if (ok === 5 && currentCaseIndex < 5) {
-                document.getElementById('ar-image').setAttribute('material', 'src', casesData[currentCaseIndex].tex);
-                const obj = document.querySelector('#ar-object');
-                if (obj && obj.components['photo-controls']) obj.components['photo-controls'].sizeToFit();
-            }
         }
         setTimeout(() => {
             if (statusEl.innerText === "Camera is starting...") {
@@ -172,24 +191,22 @@
         }, 10000);
 
         const casesData = [
-            { img: "#img-case1", tex: "#tex-case1", optA: "a) He has a cold", optB: "b) He has a headache", correct: 0 },
-            { img: "#img-case2", tex: "#tex-case2", optA: "a) She has a fever", optB: "b) She has a headache", correct: 1 },
-            { img: "#img-case3", tex: "#tex-case3", optA: "a) He has a stomachache", optB: "b) He has a toothache", correct: 0 },
-            { img: "#img-case4", tex: "#tex-case4", optA: "a) She has an earache", optB: "b) She has a sore throat", correct: 1 },
-            { img: "#img-case5", tex: "#tex-case5", optA: "a) He has a backache", optB: "b) He has a fever", correct: 1 }
+            { optA: "a) He has a cold", optB: "b) He has a headache", correct: 0 },
+            { optA: "a) She has a fever", optB: "b) She has a headache", correct: 1 },
+            { optA: "a) He has a stomachache", optB: "b) He has a toothache", correct: 0 },
+            { optA: "a) She has an earache", optB: "b) She has a sore throat", correct: 1 },
+            { optA: "a) He has a backache", optB: "b) He has a fever", correct: 1 }
         ];
 
         let currentCaseIndex = 0;
 
         function updateCase() {
             if (currentCaseIndex < casesData.length) {
-                document.getElementById("ar-image").setAttribute("material", "src", casesData[currentCaseIndex].tex);
+                photoImg.src = 'case' + (currentCaseIndex + 1) + '.png';
                 document.getElementById("btn-a").innerText = casesData[currentCaseIndex].optA;
                 document.getElementById("btn-b").innerText = casesData[currentCaseIndex].optB;
                 document.getElementById("feedback").innerText = "";
                 statusEl.innerText = "Case " + (currentCaseIndex + 1) + " of 5";
-                const obj = document.querySelector("#ar-object");
-                if (obj && obj.components['photo-controls']) obj.components['photo-controls'].sizeToFit();
             } else {
                 document.getElementById("question-text").innerText = "Lesson Completed!";
                 document.getElementById("options").style.display = "none";
