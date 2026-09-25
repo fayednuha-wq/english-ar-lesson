@@ -194,15 +194,19 @@
                 document.getElementById("feedback").style.color = "#4CD964";
                 document.getElementById("feedback").innerText = "Amazing Job!";
                 statusEl.innerText = "";
+                // fun celebration: confetti + happy fanfare + happy voice
+                confettiBurst();
+                playFanfare();
+                speakFeedback(true, "Amazing job! Well done!");
             }
         }
 
         // ---------------- happy / sad voice for answers ----------------
         // Uses the phone's built-in speech (works on iPhone Safari, no files needed).
-        function speakFeedback(happy) {
+        function speakFeedback(happy, phrase) {
             if (!('speechSynthesis' in window)) return;
             try { window.speechSynthesis.cancel(); } catch (e) {}
-            const u = new SpeechSynthesisUtterance(happy ? "Great job!" : "Try again");
+            const u = new SpeechSynthesisUtterance(phrase || (happy ? "Great job!" : "Try again"));
             u.lang = 'en-US';
             u.rate = happy ? 1.05 : 0.85;
             u.pitch = happy ? 1.3 : 0.6;
@@ -210,7 +214,76 @@
             window.speechSynthesis.speak(u);
         }
 
+        // ---------------- celebration when all 5 answers are done ----------------
+        // A happy fanfare melody (no audio files needed) and a confetti burst.
+        let audioCtx = null;
+        function ensureAudio() {
+            try {
+                if (!audioCtx) {
+                    audioCtx = new (window.AudioContext || window.webkitAudioContext)();
+                }
+                if (audioCtx.state === 'suspended') audioCtx.resume();
+            } catch (e) {}
+        }
+
+        function playFanfare() {
+            if (!audioCtx) return;
+            // "juicy" ascending notes: C5 E5 G5 C6 E6 - a joyful little tune
+            const notes = [523.25, 659.25, 783.99, 1046.50, 1318.51];
+            notes.forEach(function (freq, i) {
+                const t = audioCtx.currentTime + i * 0.16;
+                const osc = audioCtx.createOscillator();
+                const gain = audioCtx.createGain();
+                osc.type = 'triangle';
+                osc.frequency.value = freq;
+                gain.gain.setValueAtTime(0.0001, t);
+                gain.gain.exponentialRampToValueAtTime(0.22, t + 0.03);
+                gain.gain.exponentialRampToValueAtTime(0.0001, t + 0.6);
+                osc.connect(gain);
+                gain.connect(audioCtx.destination);
+                osc.start(t);
+                osc.stop(t + 0.7);
+            });
+        }
+
+        function confettiBurst() {
+            const layer = document.createElement('div');
+            layer.id = 'confetti-layer';
+            layer.style.cssText = 'position:fixed;top:0;left:0;width:100%;height:100%;pointer-events:none;z-index:500;overflow:hidden;';
+            document.body.appendChild(layer);
+            const colors = ['#ff5b5b', '#ffd23f', '#4CD964', '#4aa3ff', '#ff8ae2', '#9b6bff', '#ff9f43'];
+            const emojis = ['🎉', '⭐', '🎊', '💚', '💜', '💛', '❤️', '🌟'];
+            const total = 80;
+            for (let i = 0; i < total; i++) {
+                const piece = document.createElement('div');
+                piece.style.position = 'absolute';
+                piece.style.left = (Math.random() * 100) + '%';
+                piece.style.top = '-6%';
+                if (Math.random() < 0.5) {
+                    piece.textContent = emojis[Math.floor(Math.random() * emojis.length)];
+                    piece.style.fontSize = (14 + Math.random() * 16) + 'px';
+                } else {
+                    piece.style.width = (8 + Math.random() * 8) + 'px';
+                    piece.style.height = (12 + Math.random() * 8) + 'px';
+                    piece.style.background = colors[Math.floor(Math.random() * colors.length)];
+                    piece.style.borderRadius = Math.random() < 0.5 ? '50%' : '2px';
+                }
+                layer.appendChild(piece);
+                const dur = 1800 + Math.random() * 1400;
+                const drift = (Math.random() - 0.5) * 140;
+                const rot = (Math.random() * 720) - 360;
+                piece.animate([
+                    { transform: 'translate(0,0) rotate(0deg)', opacity: 1 },
+                    { transform: 'translate(' + drift + 'px,' + (window.innerHeight + 80) + 'px) rotate(' + rot + 'deg)', opacity: 0.95 }
+                ], { duration: dur, easing: 'cubic-bezier(.15,.6,.35,1)', fill: 'forwards' });
+            }
+            setTimeout(function () {
+                if (layer.parentNode) layer.parentNode.removeChild(layer);
+            }, 4500);
+        }
+
         function checkAnswer(selectedIndex) {
+            ensureAudio(); // unlock sound on the first tap (needed by Safari)
             const feedbackEl = document.getElementById("feedback");
             const correctIndex = casesData[currentCaseIndex].correct;
 
