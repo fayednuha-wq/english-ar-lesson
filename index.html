@@ -2,6 +2,9 @@
 <html lang="en">
 <head>
     <meta charset="UTF-8">
+    <meta http-equiv="Cache-Control" content="no-cache, no-store, must-revalidate">
+    <meta http-equiv="Pragma" content="no-cache">
+    <meta http-equiv="Expires" content="0">
     <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
     <title>English AR Lesson - What's wrong?</title>
     <script src="https://aframe.io/releases/1.3.0/aframe.min.js"></script>
@@ -50,7 +53,7 @@
 <body>
     <div id="status">Camera is starting... please allow camera access</div>
 
-    <div id="ar-photo"><img id="ar-photo-img" src="case1.png" alt=""></div>
+    <div id="ar-photo"><img id="ar-photo-img" alt=""></div>
 
     <div id="ui-container">
         <div class="question-box">
@@ -72,6 +75,12 @@
         const statusEl = document.getElementById("status");
         const photoEl = document.getElementById("ar-photo");
         const photoImg = document.getElementById("ar-photo-img");
+
+        // Bump this number whenever new photos are uploaded, so phones that
+        // saved an old copy are forced to download the new colorful photos.
+        const PHOTO_VERSION = "2026-09-25v1";
+        const photoUrl = function (n) { return 'case' + n + '.png?v=' + PHOTO_VERSION; };
+        photoImg.src = photoUrl(1);
 
         // ---------------- photo size & gestures (pinch = resize, drag = rotate) ----------------
         let scale = 1.85;          // default photo size (matches the liked size)
@@ -164,17 +173,17 @@
         // ---------------- questions ----------------
         const casesData = [
             { optA: "a) He has a cold", optB: "b) He has a headache", correct: 0 },
-            { optA: "a) She has a fever", optB: "b) She has a headache", correct: 1 },
+            { optA: "a) He has a fever", optB: "b) He has a headache", correct: 1 },
             { optA: "a) He has a stomachache", optB: "b) He has a toothache", correct: 0 },
             { optA: "a) She has an earache", optB: "b) She has a sore throat", correct: 1 },
-            { optA: "a) He has a backache", optB: "b) He has a fever", correct: 1 }
+            { optA: "a) She has a headache", optB: "b) She has a fever", correct: 1 }
         ];
 
         let currentCaseIndex = 0;
 
         function updateCase() {
             if (currentCaseIndex < casesData.length) {
-                photoImg.src = 'case' + (currentCaseIndex + 1) + '.png';
+                photoImg.src = photoUrl(currentCaseIndex + 1);
                 document.getElementById("btn-a").innerText = casesData[currentCaseIndex].optA;
                 document.getElementById("btn-b").innerText = casesData[currentCaseIndex].optB;
                 document.getElementById("feedback").innerText = "";
@@ -188,6 +197,19 @@
             }
         }
 
+        // ---------------- happy / sad voice for answers ----------------
+        // Uses the phone's built-in speech (works on iPhone Safari, no files needed).
+        function speakFeedback(happy) {
+            if (!('speechSynthesis' in window)) return;
+            try { window.speechSynthesis.cancel(); } catch (e) {}
+            const u = new SpeechSynthesisUtterance(happy ? "Great job!" : "Try again");
+            u.lang = 'en-US';
+            u.rate = happy ? 1.05 : 0.85;
+            u.pitch = happy ? 1.3 : 0.6;
+            u.volume = 1;
+            window.speechSynthesis.speak(u);
+        }
+
         function checkAnswer(selectedIndex) {
             const feedbackEl = document.getElementById("feedback");
             const correctIndex = casesData[currentCaseIndex].correct;
@@ -195,6 +217,7 @@
             if (selectedIndex === correctIndex) {
                 feedbackEl.style.color = "#4CD964";
                 feedbackEl.innerText = "Great Job! Correct!";
+                speakFeedback(true); // happy voice
 
                 setTimeout(function () {
                     currentCaseIndex++;
@@ -203,6 +226,7 @@
             } else {
                 feedbackEl.style.color = "#FF3B30";
                 feedbackEl.innerText = "Try Again!";
+                speakFeedback(false); // sad voice
             }
         }
     </script>
