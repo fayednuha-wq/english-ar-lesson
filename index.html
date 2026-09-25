@@ -1,0 +1,163 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+    <title>English AR Lesson - What's wrong?</title>
+    <script src="https://aframe.io/releases/1.3.0/aframe.min.js"></script>
+    <script src="https://cdn.jsdelivr.net/gh/AR-js-org/AR.js@3.4.6/aframe/build/aframe-ar.js"></script>
+    <style>
+        html, body { margin: 0; padding: 0; height: 100%; overflow: hidden; font-family: Arial, sans-serif; }
+        #ui-container {
+            position: fixed; bottom: 20px; left: 0; width: 100%;
+            text-align: center; z-index: 99999; box-sizing: border-box;
+            padding: 0 15px; pointer-events: none;
+        }
+        .question-box {
+            background: rgba(0,0,0,0.9); color: white; padding: 15px 20px;
+            border-radius: 15px; display: inline-block; font-size: 16px;
+            max-width: 100%; box-shadow: 0 4px 20px rgba(0,0,0,0.8);
+            border: 1px solid rgba(255,255,255,0.2); pointer-events: auto;
+        }
+        .buttons-group { margin-top: 10px; display: flex; justify-content: center; gap: 10px; }
+        .btn {
+            background-color: #4CAF50; color: white; border: none;
+            padding: 10px 18px; font-size: 15px; border-radius: 8px;
+            cursor: pointer; font-weight: bold;
+        }
+        .btn:active { background-color: #388E3C; }
+        #feedback { font-size: 16px; font-weight: bold; margin-top: 8px; }
+        .creators-credit { margin-top: 8px; font-size: 12px; color: #aaa; letter-spacing: 0.5px; }
+        #status {
+            position: fixed; top: 20px; left: 0; width: 100%; text-align: center;
+            z-index: 99999; color: #fff; font-size: 14px; font-weight: bold;
+            text-shadow: 0 1px 4px rgba(0,0,0,0.8); pointer-events: none;
+        }
+    </style>
+</head>
+<body>
+    <div id="status">Camera is starting...</div>
+
+    <div id="ui-container">
+        <div class="question-box">
+            <div id="question-text">What's wrong?</div>
+            <div class="buttons-group" id="options">
+                <button id="btn-a" class="btn" onclick="checkAnswer(0)">a) He has a cold</button>
+                <button id="btn-b" class="btn" onclick="checkAnswer(1)">b) He has a headache</button>
+            </div>
+            <div id="feedback"></div>
+            <div class="creators-credit">Created by Noha Fayed</div>
+        </div>
+    </div>
+
+    <a-scene id="scene" embedded arjs="sourceType: webcam; videoTexture: true; debugUIEnabled: false;"
+             vr-mode-ui="enabled: false">
+        <a-assets>
+            <img id="img-case1" src="case1.png">
+            <img id="img-case2" src="case2.png">
+            <img id="img-case3" src="case3.png">
+            <img id="img-case4" src="case4.png">
+            <img id="img-case5" src="case5.png">
+        </a-assets>
+
+        <a-entity id="ar-object" position="0 0.2 -2.2" rotation="0 0 0" touch-rotate>
+            <a-plane id="ar-image" src="#img-case1" width="1.8" height="0.98" position="0 0 0"
+                     material="shader: flat; transparent: true; side: double;"></a-plane>
+        </a-entity>
+    </a-scene>
+
+    <script>
+        const statusEl = document.getElementById("status");
+
+        AFRAME.registerComponent('touch-rotate', {
+            init: function () {
+                let isDragging = false;
+                let previousX = 0;
+
+                window.addEventListener('touchstart', (e) => {
+                    if (e.touches.length === 1) {
+                        isDragging = true;
+                        previousX = e.touches[0].clientX;
+                    }
+                }, { passive: true });
+
+                window.addEventListener('touchmove', (e) => {
+                    if (!isDragging || e.touches.length !== 1) return;
+                    e.preventDefault();
+                    let currentX = e.touches[0].clientX;
+                    let deltaX = currentX - previousX;
+                    let rot = this.el.getAttribute('rotation');
+
+                    this.el.setAttribute('rotation', {
+                        x: rot.x,
+                        y: rot.y + deltaX * 0.6,
+                        z: rot.z
+                    });
+
+                    previousX = currentX;
+                }, { passive: false });
+
+                window.addEventListener('touchend', () => {
+                    isDragging = false;
+                });
+            }
+        });
+
+        const scene = document.getElementById("scene");
+        if (scene) {
+            scene.addEventListener("arjs-video-loaded", () => {
+                statusEl.innerText = "Camera ready - photo in front of you";
+            });
+        }
+        setTimeout(() => {
+            if (statusEl.innerText === "Camera is starting...") {
+                statusEl.innerText = "Still starting... allow camera in Safari settings";
+            }
+        }, 10000);
+
+        const casesData = [
+            { img: "#img-case1", optA: "a) He has a cold", optB: "b) He has a headache", correct: 0 },
+            { img: "#img-case2", optA: "a) She has a fever", optB: "b) She has a headache", correct: 1 },
+            { img: "#img-case3", optA: "a) He has a stomachache", optB: "b) He has a toothache", correct: 0 },
+            { img: "#img-case4", optA: "a) She has an earache", optB: "b) She has a sore throat", correct: 1 },
+            { img: "#img-case5", optA: "a) He has a backache", optB: "b) He has a fever", correct: 1 }
+        ];
+
+        let currentCaseIndex = 0;
+
+        function updateCase() {
+            if (currentCaseIndex < casesData.length) {
+                document.getElementById("ar-image").setAttribute("src", casesData[currentCaseIndex].img);
+                document.getElementById("btn-a").innerText = casesData[currentCaseIndex].optA;
+                document.getElementById("btn-b").innerText = casesData[currentCaseIndex].optB;
+                document.getElementById("feedback").innerText = "";
+                statusEl.innerText = "Case " + (currentCaseIndex + 1) + " of 5";
+            } else {
+                document.getElementById("question-text").innerText = "Lesson Completed!";
+                document.getElementById("options").style.display = "none";
+                document.getElementById("feedback").style.color = "#4CD964";
+                document.getElementById("feedback").innerText = "Amazing Job, Noha!";
+                statusEl.innerText = "";
+            }
+        }
+
+        function checkAnswer(selectedIndex) {
+            const feedbackEl = document.getElementById("feedback");
+            const correctIndex = casesData[currentCaseIndex].correct;
+
+            if (selectedIndex === correctIndex) {
+                feedbackEl.style.color = "#4CD964";
+                feedbackEl.innerText = "Great Job! Correct!";
+
+                setTimeout(() => {
+                    currentCaseIndex++;
+                    updateCase();
+                }, 1500);
+            } else {
+                feedbackEl.style.color = "#FF3B30";
+                feedbackEl.innerText = "Try Again!";
+            }
+        }
+    </script>
+</body>
+</html>
