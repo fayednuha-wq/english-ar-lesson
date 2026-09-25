@@ -51,7 +51,7 @@
     </div>
 
     <a-scene id="scene" embedded arjs="sourceType: webcam; videoTexture: true; debugUIEnabled: false;"
-             vr-mode-ui="enabled: false">
+             renderer="colorManagement: false" vr-mode-ui="enabled: false">
         <a-assets>
             <img id="img-case1" src="case1.png">
             <img id="img-case2" src="case2.png">
@@ -60,8 +60,8 @@
             <img id="img-case5" src="case5.png">
         </a-assets>
 
-        <a-entity id="ar-object" position="0 0.2 -1.75" rotation="0 0 0" touch-rotate>
-            <a-plane id="ar-image" src="#img-case1" width="2.5" height="1.36" position="0 0 0"
+        <a-entity id="ar-object" position="0 0 -1.75" rotation="0 0 0" photo-controls>
+            <a-plane id="ar-image" src="#img-case1" width="1" height="1" position="0 0 0"
                      material="shader: flat; transparent: true;"></a-plane>
         </a-entity>
     </a-scene>
@@ -69,37 +69,69 @@
     <script>
         const statusEl = document.getElementById("status");
 
-        AFRAME.registerComponent('touch-rotate', {
+        AFRAME.registerComponent('photo-controls', {
             init: function () {
-                let isDragging = false;
-                let previousX = 0;
+                const el = this.el;
+                this.scale = 1.85;
+                this.lastPinchDist = 0;
+                this.lastTouchX = 0;
+
+                const pinchDist = (e) => {
+                    const t = e.touches;
+                    const dx = t[1].clientX - t[0].clientX;
+                    const dy = t[1].clientY - t[0].clientY;
+                    return Math.sqrt(dx * dx + dy * dy);
+                };
 
                 window.addEventListener('touchstart', (e) => {
-                    if (e.touches.length === 1) {
-                        isDragging = true;
-                        previousX = e.touches[0].clientX;
+                    if (e.touches.length === 2) {
+                        this.lastPinchDist = pinchDist(e);
+                        this.lastTouchX = 0;
+                    } else if (e.touches.length === 1) {
+                        this.lastTouchX = e.touches[0].clientX;
                     }
                 }, { passive: true });
 
                 window.addEventListener('touchmove', (e) => {
-                    if (!isDragging || e.touches.length !== 1) return;
-                    e.preventDefault();
-                    let currentX = e.touches[0].clientX;
-                    let deltaX = currentX - previousX;
-                    let rot = this.el.getAttribute('rotation');
-
-                    this.el.setAttribute('rotation', {
-                        x: rot.x,
-                        y: rot.y + deltaX * 0.6,
-                        z: rot.z
-                    });
-
-                    previousX = currentX;
+                    if (e.touches.length === 2) {
+                        e.preventDefault();
+                        const d = pinchDist(e);
+                        if (this.lastPinchDist > 0) {
+                            this.scale = Math.min(4.5, Math.max(0.4, this.scale * (d / this.lastPinchDist)));
+                            this.apply();
+                        }
+                        this.lastPinchDist = d;
+                    } else if (e.touches.length === 1) {
+                        if (this.lastTouchX === 0) { this.lastTouchX = e.touches[0].clientX; }
+                        const dx = e.touches[0].clientX - this.lastTouchX;
+                        const rot = el.getAttribute('rotation');
+                        el.setAttribute('rotation', { x: rot.x, y: rot.y + dx * 0.5, z: rot.z });
+                        this.lastTouchX = e.touches[0].clientX;
+                    }
                 }, { passive: false });
 
-                window.addEventListener('touchend', () => {
-                    isDragging = false;
+                window.addEventListener('touchend', (e) => {
+                    if (e.touches.length < 2) this.lastPinchDist = 0;
+                    if (e.touches.length === 0) this.lastTouchX = 0;
                 });
+
+                this.apply = this.apply.bind(this);
+                this.sizeToFit = this.sizeToFit.bind(this);
+            },
+            sizeToFit: function () {
+                const img = document.querySelector(casesData[currentCaseIndex].img);
+                const plane = document.getElementById("ar-image");
+                if (img && img.naturalWidth > 0) {
+                    const a = img.naturalWidth / img.naturalHeight;
+                    plane.setAttribute('width', Math.max(a, 0.25));
+                    plane.setAttribute('height', 1);
+                }
+                this.apply();
+            },
+            apply: function () {
+                const s = this.scale;
+                this.el.setAttribute('scale', s + ' ' + s + ' ' + s);
+                this.el.setAttribute('position', { x: 0, y: s / 2 - 1.0, z: -1.75 });
             }
         });
 
@@ -107,6 +139,8 @@
         if (scene) {
             scene.addEventListener("arjs-video-loaded", () => {
                 statusEl.innerText = "Camera ready - photo in front of you";
+                const obj = document.querySelector("#ar-object");
+                if (obj && obj.components['photo-controls']) obj.components['photo-controls'].sizeToFit();
             });
         }
         setTimeout(() => {
@@ -132,6 +166,8 @@
                 document.getElementById("btn-b").innerText = casesData[currentCaseIndex].optB;
                 document.getElementById("feedback").innerText = "";
                 statusEl.innerText = "Case " + (currentCaseIndex + 1) + " of 5";
+                const obj = document.querySelector("#ar-object");
+                if (obj && obj.components['photo-controls']) obj.components['photo-controls'].sizeToFit();
             } else {
                 document.getElementById("question-text").innerText = "Lesson Completed!";
                 document.getElementById("options").style.display = "none";
