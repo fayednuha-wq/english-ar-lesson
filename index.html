@@ -50,8 +50,16 @@
         </div>
     </div>
 
+    <canvas id="tex-case1" width="1024" height="1024" style="display:none"></canvas>
+    <canvas id="tex-case2" width="1024" height="1024" style="display:none"></canvas>
+    <canvas id="tex-case3" width="1024" height="1024" style="display:none"></canvas>
+    <canvas id="tex-case4" width="1024" height="1024" style="display:none"></canvas>
+    <canvas id="tex-case5" width="1024" height="1024" style="display:none"></canvas>
+
     <a-scene id="scene" embedded arjs="sourceType: webcam; videoTexture: true; debugUIEnabled: false;"
              renderer="colorManagement: false" vr-mode-ui="enabled: false">
+        <a-light type="ambient" color="#ffffff" intensity="1.15"></a-light>
+        <a-light type="directional" color="#ffffff" intensity="0.6" position="1 1 1"></a-light>
         <a-assets>
             <img id="img-case1" src="case1.png">
             <img id="img-case2" src="case2.png">
@@ -62,7 +70,7 @@
 
         <a-entity id="ar-object" position="0 0 -1.75" rotation="0 0 0" photo-controls>
             <a-plane id="ar-image" src="#img-case1" width="1" height="1" position="0 0 0"
-                     material="shader: flat; transparent: true;"></a-plane>
+                     material="shader: standard; transparent: true; opacity: 1; depthWrite: false;"></a-plane>
         </a-entity>
     </a-scene>
 
@@ -119,13 +127,7 @@
                 this.sizeToFit = this.sizeToFit.bind(this);
             },
             sizeToFit: function () {
-                const img = document.querySelector(casesData[currentCaseIndex].img);
-                const plane = document.getElementById("ar-image");
-                if (img && img.naturalWidth > 0) {
-                    const a = img.naturalWidth / img.naturalHeight;
-                    plane.setAttribute('width', Math.max(a, 0.25));
-                    plane.setAttribute('height', 1);
-                }
+                // photos are 1024x1024 with the character centered; the plane stays square
                 this.apply();
             },
             apply: function () {
@@ -139,9 +141,29 @@
         if (scene) {
             scene.addEventListener("arjs-video-loaded", () => {
                 statusEl.innerText = "Camera ready - photo in front of you";
-                const obj = document.querySelector("#ar-object");
-                if (obj && obj.components['photo-controls']) obj.components['photo-controls'].sizeToFit();
+                buildCanvasTextures();
+                setTimeout(buildCanvasTextures, 1500);
             });
+        }
+
+        function buildCanvasTextures() {
+            const names = ['case1', 'case2', 'case3', 'case4', 'case5'];
+            let ok = 0;
+            names.forEach(function (nm) {
+                const srcImg = document.getElementById('img-' + nm);
+                const cv = document.getElementById('tex-' + nm);
+                if (srcImg && cv && srcImg.naturalWidth > 0) {
+                    const ctx = cv.getContext('2d');
+                    ctx.clearRect(0, 0, cv.width, cv.height);
+                    ctx.drawImage(srcImg, 0, 0, cv.width, cv.height);
+                    ok++;
+                }
+            });
+            if (ok === 5 && currentCaseIndex < 5) {
+                document.getElementById('ar-image').setAttribute('material', 'src', casesData[currentCaseIndex].tex);
+                const obj = document.querySelector('#ar-object');
+                if (obj && obj.components['photo-controls']) obj.components['photo-controls'].sizeToFit();
+            }
         }
         setTimeout(() => {
             if (statusEl.innerText === "Camera is starting...") {
@@ -150,18 +172,18 @@
         }, 10000);
 
         const casesData = [
-            { img: "#img-case1", optA: "a) He has a cold", optB: "b) He has a headache", correct: 0 },
-            { img: "#img-case2", optA: "a) She has a fever", optB: "b) She has a headache", correct: 1 },
-            { img: "#img-case3", optA: "a) He has a stomachache", optB: "b) He has a toothache", correct: 0 },
-            { img: "#img-case4", optA: "a) She has an earache", optB: "b) She has a sore throat", correct: 1 },
-            { img: "#img-case5", optA: "a) He has a backache", optB: "b) He has a fever", correct: 1 }
+            { img: "#img-case1", tex: "#tex-case1", optA: "a) He has a cold", optB: "b) He has a headache", correct: 0 },
+            { img: "#img-case2", tex: "#tex-case2", optA: "a) She has a fever", optB: "b) She has a headache", correct: 1 },
+            { img: "#img-case3", tex: "#tex-case3", optA: "a) He has a stomachache", optB: "b) He has a toothache", correct: 0 },
+            { img: "#img-case4", tex: "#tex-case4", optA: "a) She has an earache", optB: "b) She has a sore throat", correct: 1 },
+            { img: "#img-case5", tex: "#tex-case5", optA: "a) He has a backache", optB: "b) He has a fever", correct: 1 }
         ];
 
         let currentCaseIndex = 0;
 
         function updateCase() {
             if (currentCaseIndex < casesData.length) {
-                document.getElementById("ar-image").setAttribute("src", casesData[currentCaseIndex].img);
+                document.getElementById("ar-image").setAttribute("material", "src", casesData[currentCaseIndex].tex);
                 document.getElementById("btn-a").innerText = casesData[currentCaseIndex].optA;
                 document.getElementById("btn-b").innerText = casesData[currentCaseIndex].optB;
                 document.getElementById("feedback").innerText = "";
